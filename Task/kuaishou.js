@@ -157,8 +157,7 @@ function formalSign() {
           offici_code = formalSign_res.result
       if(offici_code == 100111){
          offic_sign = `签到结果: ${formalSign_res.error_msg}`;
-         $.log(`~~~错误信息: ${formalSign_res.error_msg}`);
-         return
+         $.log(`错误信息: ${formalSign_res.error_msg}`);
         } else if(offici_code == 100136){
          offic_sign = `签到结果: ${formalSign_res.error_msg}`;
       $.log(""+formalSign_res.error_msg)
@@ -244,8 +243,8 @@ function speedSign() {
       if(speed_code == 10007){
          speed_sign = `签到结果: ${speed_res.error_msg}`;
          $.msg($.name,speed_sign,'');
-         $.log(`错误信息: ${speed_res.error_msg}${speed_code}`)
-         // $.done()
+         $.log(`错误信息: ${speed_res.error_msg}`)
+         $.done()
         } else if(speed_code == 10901){
          speed_sign = `签到结果: ${speed_res.error_msg}`
         } else if(speed_code == 1){

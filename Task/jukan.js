@@ -65,10 +65,13 @@ if (typeof $request !== 'undefined') {
   for (let i = 0; i < BodyArr.length; i++) {
     if (BodyArr[i]) {
       bodyval = BodyArr[i]
-      ID =  decodeURIComponent(bodyval).match(/"openid":"(\w+)"/)[1]
-      apptoken = decodeURIComponent(bodyval).match(/"apptoken":"(\w+)"/)[1]
-      appVersion = decodeURIComponent(bodyval).match(/"appversion":"(.*)"/)[1]
-      cookieval = `xz_jkd_appkey=${ID}!iOS!${appVersion}`
+      const jsondata = JSON.parse(decodeURIComponent(bodyval).replace('jsondata=', '')
+      ID =  jsondata['openid']
+      apptoken = jsondata['apptoken']
+      os = jsondata['os']
+      appVersion = jsondata['appversion']
+      appVersionCode = jsondata['appversioncode']
+      cookieval = `xz_jkd_appkey=${ID}!${os}!${appVersionCode}`
       times = Date.parse(new Date())/1000
       $.index = i + 1;
    console.log("聚看点账号"+$.index+"任务开始\n")

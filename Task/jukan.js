@@ -72,6 +72,7 @@ if (typeof $request !== 'undefined') {
       appVersion = jsondata['appversion']
       appVersionCode = jsondata['appversioncode']
       cookieval = `xz_jkd_appkey=${ID}!${os}!${appVersionCode}`
+      $.log(`Cookie: ${cookieval}`)
       times = Date.parse(new Date())/1000
       $.index = i + 1;
    console.log("聚看点账号"+$.index+"任务开始\n")

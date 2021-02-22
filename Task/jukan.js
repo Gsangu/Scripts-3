@@ -65,7 +65,7 @@ if (typeof $request !== 'undefined') {
   for (let i = 0; i < BodyArr.length; i++) {
     if (BodyArr[i]) {
       bodyval = BodyArr[i]
-      const jsondata = JSON.parse(decodeURIComponent(bodyval).replace('jsondata=', '')
+      const jsondata = JSON.parse(decodeURIComponent(bodyval).replace('jsondata=', ''))
       ID =  jsondata['openid']
       apptoken = jsondata['apptoken']
       os = jsondata['os']

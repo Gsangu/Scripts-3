@@ -201,8 +201,8 @@ function LuckDrawLevel() {
       }
    $.post(Levelurl, async(error, resp, data) => {
      try {
+      $.log(data)
        get_drawLevel = JSON.parse(data)
-      //$.log(data)  
       if (get_drawLevel.ret == "ok"){
        unNum = get_drawLevel.data.unFinishNum
       if(unNum>0){

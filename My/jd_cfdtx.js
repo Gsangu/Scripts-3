@@ -1,28 +1,34 @@
 /**
 *
-  Name:财富岛提现
+  Name:财富岛提现 (修改自https://raw.githubusercontent.com/pxylen/dog_jd/master/jx_cfdtx.js，cron设置建议为 59 59 23 * * * )
   Address: 京喜App ====>>>> 全民赚大钱
+
  * 获取京喜tokens方式
  * 打开京喜农场，手动完成任意任务，必须完成任务领到水滴，提示获取cookie成功
  * 打开京喜工厂，收取电力，提示获取cookie成功
  * 打开京喜财富岛，手动成功提现一次，提示获取cookie成功
  * 手动任意完成，提示获取cookie成功即可，然后退出跑任务脚本
+
   hostname = wq.jd.com, m.jingxi.com
+
   # quanx
   [rewrite_local]
   ^https\:\/\/wq\.jd\.com\/cubeactive\/farm\/dotask url script-request-header https://raw.githubusercontent.com/whyour/hundun/master/quanx/jx_tokens.js
   ^https\:\/\/m\.jingxi\.com\/dreamfactory\/generator\/CollectCurrentElectricity url script-request-header https://raw.githubusercontent.com/whyour/hundun/master/quanx/jx_tokens.js
   ^https\:\/\/m\.jingxi\.com\/jxcfd\/consume\/CashOut url script-request-header https://raw.githubusercontent.com/whyour/hundun/master/quanx/jx_tokens.js
+
   # loon
   [Script]
   http-request ^https\:\/\/wq\.jd\.com\/cubeactive\/farm\/dotask script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/jx_tokens.js, requires-body=false, timeout=10, tag=京喜token
   http-request ^https\:\/\/m\.jingxi\.com\/dreamfactory\/generator\/CollectCurrentElectricity script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/jx_tokens.js, requires-body=false, timeout=10, tag=京喜token
   http-request ^^https\:\/\/m\.jingxi\.com\/jxcfd\/consume\/CashOut script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/jx_tokens.js, requires-body=false, timeout=10, tag=京喜token
+
   # surge
   [Script]
   京喜token = type=http-request,pattern=^https\:\/\/wq\.jd\.com\/cubeactive\/farm\/dotask,requires-body=0,max-size=0,script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/jx_tokens.js
   京喜token = type=http-request,pattern=^https\:\/\/m\.jingxi\.com\/dreamfactory\/generator\/CollectCurrentElectricity,requires-body=0,max-size=0,script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/jx_tokens.js
   京喜token = type=http-request,pattern=^https\:\/\/m\.jingxi\.com\/jxcfd\/consume\/CashOut,requires-body=0,max-size=0,script-path=https://raw.githubusercontent.com/whyour/hundun/master/quanx/jx_tokens.js
+
 *
 **/
 
@@ -30,62 +36,95 @@ const $ = new Env("京喜财富岛提现");
 const JD_API_HOST = "https://m.jingxi.com/";
 const jdCookieNode = $.isNode() ? require("./jdCookie.js") : "";
 const jdTokenNode = $.isNode() ? require('./jdJxncTokens.js') : '';
-$.result = [];
 $.cookieArr = [];
-$.currentCookie = '';
 $.tokenArr = [];
-$.currentToken = {};
-$.strPhoneID = '';
-$.strPgUUNum = '';
-$.userName = '';
+let concurrency = 9 // 并发数
 
 !(async () => {
   if (!getCookies()) return;
   if (!getTokens()) return;
-  for (let i = 0; i < $.cookieArr.length; i++) {
-    $.currentCookie = $.cookieArr[i];
-    $.currentToken = $.tokenArr[i];
-    if ($.currentCookie) {
-      $.userName =  decodeURIComponent($.currentCookie.match(/pt_pin=(.+?);/) && $.currentCookie.match(/pt_pin=(.+?);/)[1]);
-      $.log(`\n开始【京东账号${i + 1}】${$.userName}`);
-      
-      await cashOut();
+  let execAcList = getExecAcList()
+  let msgInfo = []
+    for (let arr of execAcList) {
+      let allAc = arr.map(ac => ac.no).join(', ')
+      $.log(`\n=======================================\n开始【${$.name}账号：${allAc}】`)
+      let rtList = await Promise.all(arr.map((ac, i) => cashOut(ac, i)))
+      msgInfo.push(rtList.map(ac => `【账号${ac.no}】${ac.tk['pin']||''}${ac.result?'\n\t'+ac.result:''}`).join('\n\n'))
     }
+  if (msgInfo.length <= 0) {
+    msgInfo.push(`暂无京喜token数据，请抓取后再试`)
   }
-  await showMsg();
+  $.msg($.name, '', msgInfo.join('\n\n'))
 })()
   .catch((e) => $.logErr(e))
   .finally(() => $.done());
 
-function cashOut() {
+function getExecAcList() {
+  let acList = []
+  for (let i = 0; i < $.tokenArr.length; i++) {
+    let tk = $.tokenArr[i] || {};
+    let hitCks = $.cookieArr.filter(ck => ck && decodeURIComponent((ck.match(/pt_pin=(.+?);/) || ['', ''])[1]) == tk['pin']);
+    if (hitCks && hitCks.length > 0) {
+      acList.push({
+        no: i + 1,
+        tk,
+        ck: hitCks[0]
+      })
+    }
+  }
+  let execAcList = []
+  let len = acList.length
+  // 计算分组后每组账号个数
+  let slot = len % concurrency == 0 ? len / concurrency : parseInt(len / concurrency) + 1
+  slot = Math.ceil(len / (slot || 1))
+  let idx = -1
+  acList.forEach((o, i) => {
+    if (i % slot == 0) {
+      idx++
+    }
+    if (execAcList[idx]) {
+      execAcList[idx].push(o)
+    } else {
+      execAcList[idx] = [o]
+    }
+  })
+  $.log(`----------- 共${len}个账号分${execAcList.length}组去执行 -----------`)
+  return execAcList
+}
+
+function cashOut(ac, i) {
   return new Promise(async (resolve) => {
-    $.get(
-      taskUrl(
-        `consume/CashOut`,
-        `ddwMoney=100&dwIsCreateToken=0&ddwMinPaperMoney=100000&strPgtimestamp=${$.currentToken['timestamp']}&strPhoneID=${$.currentToken['phoneid']}&strPgUUNum=${$.currentToken['farm_jstoken']}`
-      ), 
-      async (err, resp, data) => {
+    let opts = taskUrl(`consume/CashOut`, `ddwMoney=100&dwIsCreateToken=0&ddwMinPaperMoney=150000&strPgtimestamp=${ac.tk['timestamp']}&strPhoneID=${ac.tk['phoneid']}&strPgUUNum=${ac.tk['farm_jstoken']}`, ac.ck);
+    let now = new Date()
+    $.log(`账号 ${ac.no} 开始时间：${$.time('yyyy-MM-dd HH:mm:ss')}.${now.getMilliseconds()}`)
+    if (now.getSeconds() == 59) {
+      await $.wait(1000 - now.getMilliseconds())
+    } else if (now.getSeconds() == 58) {
+      await $.wait(2000 - now.getMilliseconds())
+    }
+    $.get(opts, async (err, resp, data) => {
         try {
-          $.log(data);
-          let { iRet, sErrMsg } = JSON.parse(data);
-          $.log(sErrMsg);
-          $.result.push(`【${$.userName}】\n ${sErrMsg == "" ? sErrMsg="今天手气太棒了" : sErrMsg}`);
-          resolve(sErrMsg);
+          if (err) {
+            $.logErr(`❌ 账号${ac.no} API请求失败，请检查网络后重试\n data: ${JSON.stringify(err, null, 2)}`);
+          } else {
+            let sErrMsg = $.toObj(data, {sErrMsg: '转换提现结果异常'})['sErrMsg'];
+            ac.result = sErrMsg == "" ? "今天手气太棒了" : sErrMsg;
+          }
         } catch (e) {
-          $.logErr(e, resp);
+          $.logErr(`======== 账号 ${ac.no} ========\nerror:${e}\ndata: ${resp && resp.body}`)
         } finally {
-          resolve();
+          resolve(ac);
         }
       }
     );
   });
-} 
+}
 
-function taskUrl(function_path, body) {
+function taskUrl(function_path, body, ck) {
   return {
     url: `${JD_API_HOST}jxcfd/${function_path}?strZone=jxcfd&bizCode=jxcfd&source=jxcfd&dwEnv=7&_cfd_t=${Date.now()}&ptag=&${body}&_stk=_cfd_t%2CbizCode%2CddwMinPaperMoney%2CddwMoney%2CdwEnv%2CdwIsCreateToken%2Cptag%2Csource%2CstrPgUUNum%2CstrPgtimestamp%2CstrPhoneID%2CstrZone&_ste=1&_=${Date.now()}&sceneval=2&g_login_type=1&g_ty=ls`,
     headers: {
-      Cookie: $.currentCookie,
+      Cookie: ck,
       Accept: "*/*",
       Connection: "keep-alive",
       Referer:"https://st.jingxi.com/fortune_island/cash.html?jxsid=16115391812299482601&_f_i_jxapp=1",
@@ -134,25 +173,6 @@ function getTokens() {
     return false;
   }
   return true;
-}
-
-function showMsg() {
-  return new Promise((resolve) => {
-    if ($.notifyTime) {
-      const notifyTimes = $.notifyTime.split(",").map((x) => x.split(":"));
-      const now = $.time("HH:mm").split(":");
-      $.log(`\n${JSON.stringify(notifyTimes)}`);
-      $.log(`\n${JSON.stringify(now)}`);
-      if (
-        notifyTimes.some((x) => x[0] === now[0] && (!x[1] || x[1] === now[1]))
-      ) {
-        $.msg($.name, "", `\n${$.result.join("\n")}`);
-      }
-    } else {
-      $.msg($.name, "", `\n${$.result.join("\n")}`);
-    }
-    resolve();
-  });
 }
 
 // prettier-ignore
